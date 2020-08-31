@@ -7,7 +7,9 @@ script_v8.py is the main simulation pipeline
 
 
 LAUNCH OPTIONS:
+
 CASE 1 (--times, no --ancientSamps):
+
 python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 \
 --converted-filename relate_input \
 --path-to-relate-bin ./relate_v1.1.2_x86_64_static/bin/Relate \
