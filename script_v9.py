@@ -1,7 +1,6 @@
 """
 Automate running of different scripts
-
-python3 automation_script.py -p0 0.5 -s 0.05 -n 5000 --nder 4 --ton 10000 --toff 10500  \
+python3 script_v9.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 \
     --converted-filename relate_input \
     --path-to-relate-bin ./relate_v1.1.2_x86_64_static/bin/Relate \
     --relate-output-filename relate_step_1 \
