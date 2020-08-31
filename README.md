@@ -9,7 +9,7 @@ script_v8.py is the main simulation pipeline
 LAUNCH OPTIONS:
 
 CASE 1 (--times, no --ancientSamps):
-
+~~~
 python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 ``\``
 
 --converted-filename relate_input ``\``
@@ -33,9 +33,9 @@ python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 ``\``
 --inference-script-output-filename clues_output ``\``
 
 --output-directory output --inference-script-coalescence-times-file-path clues_input_from_relate
-
+~~~~
 CASE 2 (no --times, --ancientSamps):
-
+~~~
 python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 ``\``
 
 --converted-filename relate_input ``\``
@@ -61,9 +61,9 @@ python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 ``\``
 --output-directory output --create-ancient-samples --case2-script-ancient-samples-generation-gap 500 ``\``
 
 --case2-script-number-of-ancient-samples 100
-
+~~~
 CASE 3 (--times, --ancientSamps):
-
+~~~
 python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 ``\``
 
 --converted-filename relate_input ``\``
@@ -91,7 +91,7 @@ python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 ``\``
 --create-ancient-samples --case2-script-ancient-samples-generation-gap 500 ``\``
 
 --case2-script-number-of-ancient-samples 100
-
+~~~
 
 TO DO:
 1. fix whack case1 bug (plot.pdf created, but no plot)
