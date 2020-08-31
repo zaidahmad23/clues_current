@@ -1,6 +1,8 @@
 # clues_script
 step.py creates .traj files for mssel 
+
 case2.py runs helper functions for Ancient DNA stuff 
+
 script_v8.py is the main simulation pipeline 
 
 
