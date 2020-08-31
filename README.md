@@ -58,4 +58,4 @@ python3 script_v8.py -p0 0.2 -s 0.04 -n 4000 --nder 4 --ton 100 --toff 0 \
 TO DO:
 1. fix whack case1 bug (plot.pdf created, but no plot)
 2. fix slight display bug for case 2, case 3 where a bit of the plot is graphically cut off
-3. write some better documentation lol
+3. write better documentation lol
