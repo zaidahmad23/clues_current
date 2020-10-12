@@ -1,14 +1,20 @@
 """
 Automate running of different scripts
 
-python3 case2.py -p0 0.2 -s 0.04 -n 4000 --nanc 100 --ton 100 --toff 0 \
+python3 case3.py -p0 0.2 -s 0.04 -n 4000 --nanc 100 --ton 100 --toff 0 \
 --converted-filename relate_input \
 --path-to-relate-bin ./relate_v1.1.2_x86_64_static/bin/Relate \
 --relate-output-filename relate_step_1 \
 --relate-map-file-path clues/example/genetic_map.txt \
+--sample-branch-length-coal-file-path clues/example/example.coal \
+--path-to-sample-branch-length-script ./relate_v1.1.2_x86_64_static/scripts/SampleBranchLengths/SampleBranchLengths.sh \
+--sample-branch-length-script-format b \
+--sample-branch-length-script-output-filename clues_input_from_relate \
+--sample-branch-length-script-n-samples 5 \
 --inference-script-output-filename clues_output \
---output-directory output3 --mutation-rate 1.25e-8 \
---create-ancient-samples --step2-script-ancient-samples-generation-gap 500 --step2-script-number-of-ancient-samples 100
+--output-directory output4 --inference-script-coalescence-times-filename clues_input_from_relate --mutation-rate 1.25e-8 \
+--inference-script-time-bins-file-path example/timeBins.txt \
+--step2-script-ancient-samples-generation-gap 500 --step2-script-number-of-ancient-samples 100
 """
 import subprocess
 import argparse
@@ -132,10 +138,70 @@ def convert_txt_to_haps_and_sample(r_script_path, input_txt_file_path, output_fi
     execute_command(f"Rscript {r_script_path} {input_txt_file_path} {output_file_name} 1000000 400".split(" "))
 
 
-def run_inference(ancient_samples_file_path, inference_output_filename):
+def run_relate(
+    relate_binary_path,
+    mode,
+    haps_file_path,
+    sample_file_path,
+    map_file_path,
+    effective_population_size,
+    mutation_rate,
+    output_file_path,
+):
+    command = list(
+        map(
+            str,
+            [
+                relate_binary_path,
+                "--mode", mode,
+                "--haps", haps_file_path,
+                "--sample", sample_file_path,
+                "--map", map_file_path,
+                "-N", effective_population_size,
+                "-m", mutation_rate,
+                "-o", output_file_path,
+            ],
+        )
+    )
+    execute_command(command)
+
+
+def run_sample_branch_length(
+    script_path, input_file_name, mutation_rate, coal_file_path, _format, output_file_name, n_samples,
+    first_bp, last_bp
+):
+    command = list(
+        map(
+            str,
+            [
+                script_path,
+                "-i", input_file_name,
+                "-o", output_file_name,
+                "-m", mutation_rate,
+                "--coal", coal_file_path,
+                "--format", _format,
+                "--num_samples", n_samples
+            ],
+        )
+    )
+
+    if first_bp:
+        command += ["--first_bp", str(first_bp)]
+
+    if last_bp:
+        command += ["--last_bp", str(last_bp)]
+
+    execute_command(command)
+
+
+def run_inference(coalescence_times, ancient_samples_file_path, inference_output_filename, time_bins):
     command = ["python3", "inference.py"]
+    if coalescence_times is not None:
+        command += ["--times", coalescence_times]
     if ancient_samples_file_path is not None:
         command += ["--ancientSamps", ancient_samples_file_path]
+    if time_bins is not None:
+        command += ["--timeBins", time_bins]
 
     command += ["--out", inference_output_filename]
     execute_command(command, cwd="./clues")
@@ -174,7 +240,9 @@ def ensure_external_dependencies():
 def ensure_internal_dependencies(args):
     required_files = [
         args.step_script_path,
-        args.path_to_converter_script
+        args.path_to_converter_script,
+        args.path_to_relate_bin,
+        args.path_to_sample_branch_length_script,
     ]
 
     for _file in required_files:
@@ -225,8 +293,23 @@ def main():
     )
     argparser.add_argument("--converted-filename", type=str, help="Filename of converted .haps and .sample")
 
+    argparser.add_argument("--path-to-relate-bin", type=str, required=True, help="Path to relate binary")
+    argparser.add_argument("--relate-mode", type=str, default="All", help="Relate mode")
+    argparser.add_argument("--relate-map-file-path", type=str, required=True, help="Relate input map file")
+    argparser.add_argument("--relate-output-filename", type=str, required=True, help="Relate output files")
+
+
+    argparser.add_argument("--path-to-sample-branch-length-script", type=str, required=True)
+    argparser.add_argument("--sample-branch-length-script-format", type=str, required=True)
+    argparser.add_argument("--sample-branch-length-script-output-filename", type=str, required=True)
+    argparser.add_argument("--sample-branch-length-script-n-samples", type=int, required=True)
+    argparser.add_argument("--sample-branch-length-coal-file-path", type=str, required=True)
+    argparser.add_argument("--sample-branch-length-first-bp", type=int)
+    argparser.add_argument("--sample-branch-length-last-bp", type=int)
+
     argparser.add_argument("--inference-script-output-filename", type=str, required=True)
-    argparser.add_argument("--create-ancient-samples", action="store_true")
+    argparser.add_argument("--inference-script-coalescence-times-filename", type=str, required=True)
+    argparser.add_argument("--inference-script-time-bins-file-path", type=str, required=True)
     argparser.add_argument("--step2-script-ancient-samples-generation-gap", type=str, required=True)
     argparser.add_argument("--step2-script-number-of-ancient-samples", type=int, required=True)
 
@@ -245,6 +328,7 @@ def main():
     args.step_script_output_file_path = os.path.join(args.output_directory, args.step_script_output_file_path)
     args.massel_output = os.path.join(args.output_directory, args.massel_output)
     args.converted_filename = os.path.join(args.output_directory, args.converted_filename)
+    args.sample_branch_length_script_output_filename = os.path.join(args.output_directory, args.sample_branch_length_script_output_filename)
     args.inference_script_output_filename = os.path.join(args.output_directory, args.inference_script_output_filename)
     step2_script_ancient_samples_file_path = None
 
@@ -274,22 +358,62 @@ def main():
         input_txt_file_path=args.massel_output,
         output_file_name=args.converted_filename,
     )
+    run_relate(
+        relate_binary_path=args.path_to_relate_bin,
+        mode=args.relate_mode,
+        haps_file_path=str(Path(args.converted_filename).with_suffix(".haps")),
+        sample_file_path=str(Path(args.converted_filename).with_suffix(".sample")),
+        map_file_path=args.relate_map_file_path,
+        effective_population_size=args.effective_population_size*2,
+        mutation_rate=args.mutation_rate,
+        output_file_path=args.relate_output_filename,
+    )
+    mut_file_path = os.path.join(args.output_directory, str(Path(args.relate_output_filename).with_suffix('.mut')))
+    anc_file_path = os.path.join(args.output_directory, str(Path(args.relate_output_filename).with_suffix('.anc')))
 
-    if args.create_ancient_samples:
-        step2_script_ancient_samples_file_path = os.path.join(args.output_directory, "ancientSamples.txt")
-        run_step2(
-            p_initial=args.initial_allele_freq,
-            s=args.selection_coefficient,
-            n=args.effective_population_size,
-            ton=args.ton,
-            toff=args.toff,
-            ancient_sample_generation_gap=args.step2_script_ancient_samples_generation_gap,
-            number_of_ancient_samples=args.step2_script_number_of_ancient_samples,
-            output_file_path=step2_script_ancient_samples_file_path
+    if os.path.exists(mut_file_path):
+        os.remove(mut_file_path)
+
+    if os.path.exists(anc_file_path):
+        os.remove(anc_file_path)
+
+    shutil.move(str(Path(args.relate_output_filename).with_suffix('.mut')), args.output_directory)
+    shutil.move(str(Path(args.relate_output_filename).with_suffix('.anc')), args.output_directory)
+
+    args.relate_output_filename = os.path.join(args.output_directory, args.relate_output_filename)
+
+    step2_script_ancient_samples_file_path = os.path.join(args.output_directory, "ancientSamples.txt")
+    run_step2(
+        p_initial=args.initial_allele_freq,
+        s=args.selection_coefficient,
+        n=args.effective_population_size,
+        ton=args.ton,
+        toff=args.toff,
+        ancient_sample_generation_gap=args.step2_script_ancient_samples_generation_gap,
+        number_of_ancient_samples=args.step2_script_number_of_ancient_samples,
+        output_file_path=step2_script_ancient_samples_file_path
+    )
+
+    if args.inference_script_coalescence_times_filename is not None:
+        args.inference_script_coalescence_times_filename = os.path.join(args.output_directory, args.inference_script_coalescence_times_filename)
+
+        run_sample_branch_length(
+            script_path=args.path_to_sample_branch_length_script,
+            input_file_name=args.relate_output_filename,
+            mutation_rate=args.mutation_rate,
+            coal_file_path=args.sample_branch_length_coal_file_path,
+            _format=args.sample_branch_length_script_format,
+            output_file_name=args.sample_branch_length_script_output_filename,
+            n_samples=args.sample_branch_length_script_n_samples,
+            first_bp=args.sample_branch_length_first_bp,
+            last_bp=args.sample_branch_length_last_bp
         )
+
     run_inference(
+        coalescence_times=args.inference_script_coalescence_times_filename,
         ancient_samples_file_path=step2_script_ancient_samples_file_path,
         inference_output_filename=args.inference_script_output_filename,
+        time_bins=args.inference_script_time_bins_file_path
     )
     plot(
         mssel_traj_file_path=args.step_script_output_file_path,

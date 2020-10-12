@@ -57,12 +57,10 @@ def simulate_traj(p0, s, tOn, tOff, N):
 
 def save_mssel_input(N, output_file_path, traj):
     delta = float(1 / (4 * N))
-    f = open(output_file_path, "w")
-    f.write("ntraj: 1\nnpop: 1\nn: %d" % (len(traj)))
-    for (i, x) in enumerate(traj):
-        f.write("%.9f %.6f" % (i * delta, traj[i]))
-    f.close()
-    return
+    with open(output_file_path, "w") as f:
+        f.writelines(["ntraj: 1\n", "npop: 1\n", f"n: {len(traj)}\n"])
+        for (i, x) in enumerate(traj):
+            f.write(f"{i * delta:.9f} {traj[i]:.6f} ")
 
 
 def main():
