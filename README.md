@@ -1,8 +1,6 @@
 # clues_script
 step.py creates .traj files for mssel 
 
-step2.py runs helper functions for Ancient DNA stuff 
-
 case1.py runs inference with only --times specified 
 case2.py runs inference with only --ancientSamps specified
 case3.py runs inference with both --times and --ancientSamps specified
