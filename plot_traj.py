@@ -14,8 +14,9 @@ args = parser.parse_args()
 with open(args.msselTrajOutput) as f:
     lines = f.readlines()
 
-n = int(re.search("\d+", lines[2]).group(0))
-data = np.array(lines[-1].strip().split(" ")).astype(np.float).reshape((n, 2))
+### n = int(re.search("\d+", lines[2]).group(0))
+data = np.genfromtxt(args.msselTrajOutput, delimiter=" ", skip_header=3)
+### data = np.array(lines[-1].strip().split(" ")).astype(np.float).reshape((n, 2)
 data[:,0] *= 4 * args.effectivePopulationSize
 
 fig, ax = plt.subplots(1, 1, figsize=(20, 10))
