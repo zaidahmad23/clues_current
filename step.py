@@ -5,46 +5,42 @@ from pathlib import Path
 import argparse
 
 # Simulation Pipeline
-def simulate_selected_backwards(p0, s, N):
-    delta = float(1 / (4 * N))
+def simulate_selected_backwards(p0,s,N):
+    delta = 1/(4*N)
     traj = [p0]
-    a = s * N * 2
-    curr = int(traj[-1])
+    a = s*N*2
     while traj[-1] != 1 and traj[-1] != 0:
         curr = traj[-1]
-        nextFreq = np.random.normal(
-            -a * curr * (1 - curr) / np.tanh(a * curr) * delta + curr,
-            np.sqrt(delta) * np.sqrt(curr * (1 - curr)),
-        )
+        nextFreq = np.random.normal(-a*curr*(1-curr)/np.tanh(a*curr)*delta + curr, np.sqrt(delta) * np.sqrt(curr*(1-curr)) )
         if nextFreq > 1:
             nextFreq = 1
         if nextFreq < 0:
             nextFreq = 0
         traj.append(nextFreq)
-    final_traj = traj[1:]
-    return final_traj
+    return traj[1:]
 
+def simulate_selected_forwards(p0,s,tOn,tOff,N,eps=0.001):
 
-def simulate_selected_forwards(p0, s, tOn, tOff, N, eps=0.001):
-    delta = float(1 / (4 * N))
+    delta = 1/(4*N)
     traj = [p0]
-    for t in range(tOn, 0, -1):
+
+    for t in range(tOn,0,-1):
         if t > tOff:
-            a = s * N * 2
+            a = s*N*2
         else:
             a = 0.0
-    curr = int(traj[-1])
-    nextFreq = np.random.normal(
-        a * curr * (1 - curr) * delta + curr,
-        np.sqrt(delta) * np.sqrt(curr * (1 - curr)),
-    )
-    if nextFreq > 1:
-        nextFreq = 1
-    if nextFreq < 0:
-        nextFreq = 0
-    traj.append(nextFreq)
-    if np.min([traj[-1], 1 - traj[-1]]) < eps:
-        print("Warning: MAF less than %.4f" % (eps))
+
+        curr = traj[-1]
+        nextFreq = np.random.normal(a*curr*(1-curr)*delta + curr, np.sqrt(delta) * np.sqrt(curr*(1-curr)) )
+        if nextFreq > 1:
+            nextFreq = 1
+        if nextFreq < 0:
+            nextFreq = 0
+        traj.append(nextFreq)
+
+    if np.min([traj[-1],1-traj[-1]]) < eps:
+        print('Warning: MAF less than %.4f'%(eps))
+
     return traj
 
 
@@ -60,7 +56,7 @@ def save_mssel_input(N, output_file_path, traj):
     with open(output_file_path, "w") as f:
         f.writelines(["ntraj: 1\n", "npop: 1\n", f"n: {len(traj)}\n"])
         for (i, x) in enumerate(traj):
-            f.write(f"{i * delta:.9f} {traj[i]:.6f} ")
+            f.write(f"{i * delta:.9f} {traj[i]:.6f}\n")
 
 
 def main():
