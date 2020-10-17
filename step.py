@@ -5,7 +5,7 @@ from pathlib import Path
 import argparse
 
 # Simulation Pipeline
-def simulate_selected_backwards(p0,s,N):
+def simulate_selected_backwards(p0, s, N):
     delta = 1/(4*N)
     traj = [p0]
     a = s*N*2
@@ -19,8 +19,8 @@ def simulate_selected_backwards(p0,s,N):
         traj.append(nextFreq)
     return traj[1:]
 
-def simulate_selected_forwards(p0,s,tOn,tOff,N,eps=0.001):
 
+def simulate_selected_forwards(p0, s, tOn, tOff, N, eps=0.001):
     delta = 1/(4*N)
     traj = [p0]
 
@@ -44,10 +44,12 @@ def simulate_selected_forwards(p0,s,tOn,tOff,N,eps=0.001):
     return traj
 
 
+
 def simulate_traj(p0, s, tOn, tOff, N):
     bwd = simulate_selected_backwards(p0, 1e-8, N)
     fwd = simulate_selected_forwards(p0, s, tOn, tOff, N)
     traj = fwd[::-1] + bwd
+    print(traj[50:100:10])
     return traj
 
 
