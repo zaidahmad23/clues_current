@@ -23,7 +23,7 @@ fig, ax = plt.subplots(1, 1, figsize=(20, 10))
 plt.xticks(fontsize=18)
 plt.yticks(fontsize=18)
 
-ax.plot(data[:,0], data[:,1], 'y')
+ax.plot(data[:,0], data[:,1], 'r')
 
 epochs = np.load(f'{args.inputPrefix}.epochs.npy')
 freqs = np.load(f'{args.inputPrefix}.freqs.npy')

@@ -71,10 +71,14 @@ def simulate_gls_from_traj(gens, nsamp, traj):
     ancGLs[:,1:] = -np.inf
     genos = []
     for i,t in enumerate(np.sort(times)):
-        geno = np.random.binomial(2,traj[np.digitize(t,epochs)+1])
-        genos.append(geno)
-        ancGLs[i,geno+1] = 0.0
-        ancGLs[i,0] = t
+        if t >= gens - 1:
+            ancGLs[i, 1]=0.0
+            ancGLs[i, 0]=t
+        else:
+            geno = np.random.binomial(2,traj[np.digitize(t,epochs)+1])
+            genos.append(geno)
+            ancGLs[i,geno+1] = 0.0
+            ancGLs[i,0] = t
 
     return ancGLs, genos
 
