@@ -1,46 +1,71 @@
 """
 Automate running of different scripts
 
-python3 case1.py -p0 0.2 -s 0.04 -n 4000 --nanc 100 --ton 100 --toff 0 \
+rm -rf output && python case1.py -p0 0.2 -s 0.04 -n 4000 --nanc 100 --ton 100 --toff 0 \
 --converted-filename relate_input \
---path-to-relate-bin ./relate_v1.1.2_x86_64_static/bin/Relate \
+--path-to-relate-bin /home/meow/Desktop/temp/relate_v1.1.2_x86_64_static/bin/Relate \
 --relate-output-filename relate_step_1 \
---relate-map-file-path clues/example/genetic_map.txt \
+--relate-map-file-path /home/meow/Desktop/temp/clues/example/genetic_map.txt \
 --sample-branch-length-coal-file-path clues/example/example.coal \
 --path-to-sample-branch-length-script ./relate_v1.1.2_x86_64_static/scripts/SampleBranchLengths/SampleBranchLengths.sh \
 --sample-branch-length-script-format b \
 --sample-branch-length-script-output-filename clues_input_from_relate \
 --sample-branch-length-script-n-samples 5 \
 --inference-script-output-filename clues_output \
---output-directory output3 --inference-script-coalescence-times-filename clues_input_from_relate --mutation-rate 1.25e-8 \
---inference-script-time-bins-file-path example/timeBins.txt
+--output-directory output --inference-script-coalescence-times-filename clues_input_from_relate --mutation-rate 1.25e-8 \
+--inference-script-time-bins-file-path example/timeBins.txt --runs 2 -vv
 """
-import subprocess
 import argparse
+import csv
 import os
-import sys
+import re
 import shutil
-
+import subprocess
+import sys
+from glob import glob
 from pathlib import Path
 
 import numpy as np
 
 EXTERNAL_DEPENDENCIES = ["git", "gcc", "Rscript"]
+VERBOSE = 0
 
 
-def is_debug_mode_active():
-    return os.environ.get("DEBUG", False)
-
-def print_if_debug_mode_active(obj):
-    if is_debug_mode_active():
-        print(obj)
+def print_if_debug_mode_active(obj, level=1):
+    global VERBOSE
+    if VERBOSE >= level:
+        print(obj if not isinstance(obj, bytes) else obj.decode())
 
 
-def execute_command(args, cwd=None):
+def parse_inference_script_output_and_write_to_csv(writer, run, inference_script_output):
+    inference_script_output = inference_script_output.decode()
+    loglr, mle = None, [None, None]
+
+    match = re.search("logLR: (\d+.\d+)", inference_script_output)
+    if match:
+        loglr = match.group(1)
+
+    match = re.search("MLE:\s========\sepoch\s+selection\s(\S+\s*\S+)", inference_script_output)
+    if match:
+        mle = match.group(1).split()
+
+    writer.writerow({
+        "run #": run,
+        "logLR": loglr,
+        "epoch": mle[0],
+        "selection": mle[1]
+    })
+
+def execute_command(args, cwd=None, handle_exception=True):
     try:
         print_if_debug_mode_active(args)
-        subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+        p = subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+        print_if_debug_mode_active(p.stdout, 2)
+        return p
     except subprocess.CalledProcessError as err:
+        if not handle_exception:
+            raise
+
         stderr = err.stderr.decode("utf-8")
         stdout = err.stdout.decode("utf-8")
         if stderr:
@@ -72,7 +97,7 @@ def run_step(p_initial, s, n, output_file_path, ton, toff):
     command = list(
         map(
             str,
-            ['python3', 'step.py', '-p0', p_initial, '-s', s, '-n', n, '--output-file-path', output_file_path, '--ton', ton, '--toff', toff]
+            ['python', 'step.py', '-p0', p_initial, '-s', s, '-n', n, '--output-file-path', output_file_path, '--ton', ton, '--toff', toff]
         )
     )
     execute_command(command)
@@ -111,14 +136,15 @@ def run_mssel(
     with open(output_file, "w") as f:
         try:
             print_if_debug_mode_active(command)
-            subprocess.run(command, stdout=f, check=True)
+            p = subprocess.run(command, stdout=f, check=True)
+            print_if_debug_mode_active(p.stdout, 2)
         except subprocess.CalledProcessError as err:
             print(err.stderr if err.stderr else err.stdout)
             sys.exit(1)
 
 
-def convert_txt_to_haps_and_sample(r_script_path, input_txt_file_path, output_file_name):
-    execute_command(f"Rscript {r_script_path} {input_txt_file_path} {output_file_name} 1000000 400".split(" "))
+def convert_txt_to_haps_and_sample(r_script_path, input_txt_file_path, output_file_name, nchroms):
+    execute_command(f"Rscript {r_script_path} {input_txt_file_path} {output_file_name} 1000000 {nchroms}".split(" "))
 
 
 def run_relate(
@@ -142,11 +168,11 @@ def run_relate(
                 "--map", map_file_path,
                 "-N", effective_population_size,
                 "-m", mutation_rate,
-                "-o", output_file_path,
+                "-o", os.path.basename(output_file_path),
             ],
         )
     )
-    execute_command(command)
+    execute_command(command, cwd=os.path.dirname(output_file_path), handle_exception=False)
 
 
 def run_sample_branch_length(
@@ -174,24 +200,23 @@ def run_sample_branch_length(
     if last_bp:
         command += ["--last_bp", str(last_bp)]
 
-    execute_command(command)
+    execute_command(command, handle_exception=False)
 
 
-def run_inference(coalescence_times, inference_output_filename, time_bins):
-    command = ["python3", "inference.py"]
+def run_inference(coalescence_times, inference_output_filename, time_bins, pop_freq, burnin, thin):
+    command = ["python", "inference.py"]
     if coalescence_times is not None:
         command += ["--times", coalescence_times]
     if time_bins is not None:
         command += ["--timeBins", time_bins]
 
-    command += ["--out", inference_output_filename]
-    execute_command(command, cwd="./clues")
-
+    command += ["--popFreq", str(pop_freq), "--out", inference_output_filename, "--burnin", str(burnin), "--thin", str(thin)]
+    return execute_command(command, cwd="./clues").stdout
 
 def plot(mssel_traj_file_path, input_file_path, output_file_path, effective_population_size):
     execute_command(
         [
-            "python3",
+            "python",
             "plot_traj.py",
             input_file_path,
             output_file_path,
@@ -202,9 +227,9 @@ def plot(mssel_traj_file_path, input_file_path, output_file_path, effective_popu
 
 
 def fill_defaults(args):
-    args.nder = np.random.binomial(args.nchroms, args.initial_allele_freq)
-    if args.nanc is None:
-        args.nanc = args.nchroms - args.nder
+    args.nder = np.random.binomial(args.nchroms, np.loadtxt(os.path.join(args.output_directory, "mssel.traj"), dtype=float, skiprows=3)[0][1])
+    args.nanc = args.nchroms - args.nder
+    args.pop_freq = np.loadtxt(os.path.join(args.output_directory, "mssel.traj"), dtype=float, skiprows=3)[0][1]
 
 def ensure_external_dependencies():
     for program in EXTERNAL_DEPENDENCIES:
@@ -227,13 +252,14 @@ def ensure_internal_dependencies(args):
 
     for _file in required_files:
         if not os.path.isfile(_file):
-            print("Error: File {args.step_script_path} not found!")
+            print("Error: File {_file} not found!")
 
 
 def main():
     # Argument parsing/validation
 
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    argparser.add_argument("--runs", type=int, default=1)
     argparser.add_argument("--output-directory", type=str, default='./')
     argparser.add_argument("--step-script-path", type=str, default="step.py", help="Path to step.py script")
     argparser.add_argument("--step-script-output-file-path", type=str, default="mssel.traj")
@@ -290,9 +316,16 @@ def main():
     argparser.add_argument("--inference-script-output-filename", type=str, required=True)
     argparser.add_argument("--inference-script-coalescence-times-filename", type=str, required=True)
     argparser.add_argument("--inference-script-time-bins-file-path", type=str)
+    argparser.add_argument("--burnin", type=int, default=100)
+    argparser.add_argument("--thin", type=int, default=10)
+    argparser.add_argument("--verbose", "-v", action="count", default=0)
+    argparser.add_argument("--csv-only", action="store_true")
+    argparser.add_argument("--csv-and-plot-only", action="store_true")
 
     args = argparser.parse_args()
-    fill_defaults(args)
+
+    global VERBOSE
+    VERBOSE = args.verbose
 
     # Ensuring internal/external dependencies
     ensure_internal_dependencies(args)
@@ -302,89 +335,118 @@ def main():
     args.output_directory = os.path.abspath(args.output_directory)
     os.makedirs(args.output_directory, exist_ok=True)
 
-    # Update output files
-    args.step_script_output_file_path = os.path.join(args.output_directory, args.step_script_output_file_path)
-    args.massel_output = os.path.join(args.output_directory, args.massel_output)
-    args.converted_filename = os.path.join(args.output_directory, args.converted_filename)
-    args.sample_branch_length_script_output_filename = os.path.join(args.output_directory, args.sample_branch_length_script_output_filename)
-    args.inference_script_output_filename = os.path.join(args.output_directory, args.inference_script_output_filename)
+    f = open(os.path.join(args.output_directory, "clues_output.csv"), "w")
+    writer = csv.DictWriter(f, fieldnames=["run #", "logLR", "epoch", "selection"])
+    writer.writeheader()
 
-    # Actual Computation
-    run_step(
-        p_initial=args.initial_allele_freq,
-        s=args.selection_coefficient,
-        n=args.effective_population_size,
-        output_file_path=args.step_script_output_file_path,
-        ton=args.ton,
-        toff=args.toff
-    )
-    run_mssel(
-        nchroms=args.nchroms,
-        nreps=args.nreps,
-        nder=args.nder,
-        nanc=args.nanc,
-        path_to_trajfile=args.step_script_output_file_path,
-        genome_length=args.genome_length,
-        sel_spot=args.sel_spot,
-        mutation_rate=args.mutation_rate_for_mssel,
-        recombination_rate=args.recombination_rate,
-        output_file=args.massel_output,
-    )
-    convert_txt_to_haps_and_sample(
-        r_script_path=args.path_to_converter_script,
-        input_txt_file_path=args.massel_output,
-        output_file_name=args.converted_filename,
-    )
-    run_relate(
-        relate_binary_path=args.path_to_relate_bin,
-        mode=args.relate_mode,
-        haps_file_path=str(Path(args.converted_filename).with_suffix(".haps")),
-        sample_file_path=str(Path(args.converted_filename).with_suffix(".sample")),
-        map_file_path=args.relate_map_file_path,
-        effective_population_size=args.effective_population_size*2,
-        mutation_rate=args.mutation_rate,
-        output_file_path=args.relate_output_filename,
-    )
-    mut_file_path = os.path.join(args.output_directory, str(Path(args.relate_output_filename).with_suffix('.mut')))
-    anc_file_path = os.path.join(args.output_directory, str(Path(args.relate_output_filename).with_suffix('.anc')))
+    original_output_directory = str(args.output_directory)
+    for n_run in range(1, args.runs + 1):
+        run_computation = True
+        while run_computation:
+            args.output_directory = os.path.join(original_output_directory, f"run_{n_run}")
+            os.makedirs(args.output_directory, exist_ok=True)
 
-    if os.path.exists(mut_file_path):
-        os.remove(mut_file_path)
+            # Update output files
+            step_script_output_file_path = os.path.join(args.output_directory, args.step_script_output_file_path)
+            massel_output = os.path.join(args.output_directory, args.massel_output)
+            converted_filename = os.path.join(args.output_directory, args.converted_filename)
+            sample_branch_length_script_output_filename = os.path.join(args.output_directory, args.sample_branch_length_script_output_filename)
+            inference_script_output_filename = os.path.join(args.output_directory, args.inference_script_output_filename)
+            relate_output_filename = os.path.join(args.output_directory, args.relate_output_filename)
+            inference_script_coalescence_times_path = None
 
-    if os.path.exists(anc_file_path):
-        os.remove(anc_file_path)
+            # Actual Computation
+            run_step(
+                p_initial=args.initial_allele_freq,
+                s=args.selection_coefficient,
+                n=args.effective_population_size,
+                output_file_path=step_script_output_file_path,
+                ton=args.ton,
+                toff=args.toff
+            )
 
-    shutil.move(str(Path(args.relate_output_filename).with_suffix('.mut')), args.output_directory)
-    shutil.move(str(Path(args.relate_output_filename).with_suffix('.anc')), args.output_directory)
+            fill_defaults(args)
 
-    args.relate_output_filename = os.path.join(args.output_directory, args.relate_output_filename)
+            run_mssel(
+                nchroms=args.nchroms,
+                nreps=args.nreps,
+                nder=args.nder,
+                nanc=args.nanc,
+                path_to_trajfile=step_script_output_file_path,
+                genome_length=args.genome_length,
+                sel_spot=args.sel_spot,
+                mutation_rate=args.mutation_rate_for_mssel,
+                recombination_rate=args.recombination_rate,
+                output_file=massel_output,
+            )
+            convert_txt_to_haps_and_sample(
+                r_script_path=args.path_to_converter_script,
+                input_txt_file_path=massel_output,
+                output_file_name=converted_filename,
+                nchroms=args.nchroms
+            )
+            # re-run whole-loop computation if run_relate fails
+            try:
+                run_relate(
+                    relate_binary_path=args.path_to_relate_bin,
+                    mode=args.relate_mode,
+                    haps_file_path=str(Path(converted_filename).with_suffix(".haps")),
+                    sample_file_path=str(Path(converted_filename).with_suffix(".sample")),
+                    map_file_path=args.relate_map_file_path,
+                    effective_population_size=int(args.effective_population_size*2),
+                    mutation_rate=args.mutation_rate,
+                    output_file_path=relate_output_filename,
+                )
+            except subprocess.CalledProcessError:
+                print("relate failed! But, we are continuing the computation")
+                shutil.rmtree(args.output_directory)
+                continue
 
-    if args.inference_script_coalescence_times_filename is not None:
-        args.inference_script_coalescence_times_filename = os.path.join(args.output_directory, args.inference_script_coalescence_times_filename)
+            if args.inference_script_coalescence_times_filename is not None:
+                inference_script_coalescence_times_path = os.path.join(args.output_directory, args.inference_script_coalescence_times_filename)
+                try:
+                    run_sample_branch_length(
+                        script_path=args.path_to_sample_branch_length_script,
+                        input_file_name=relate_output_filename,
+                        mutation_rate=args.mutation_rate,
+                        coal_file_path=args.sample_branch_length_coal_file_path,
+                        _format=args.sample_branch_length_script_format,
+                        output_file_name=sample_branch_length_script_output_filename,
+                        n_samples=args.sample_branch_length_script_n_samples,
+                        first_bp=args.sample_branch_length_first_bp,
+                        last_bp=args.sample_branch_length_last_bp
+                    )
+                except subprocess.CalledProcessError:
+                    print("sample branch length failed! But, we are continuing the computation")
+                    shutil.rmtree(args.output_directory)
+                    continue
 
-        run_sample_branch_length(
-            script_path=args.path_to_sample_branch_length_script,
-            input_file_name=args.relate_output_filename,
-            mutation_rate=args.mutation_rate,
-            coal_file_path=args.sample_branch_length_coal_file_path,
-            _format=args.sample_branch_length_script_format,
-            output_file_name=args.sample_branch_length_script_output_filename,
-            n_samples=args.sample_branch_length_script_n_samples,
-            first_bp=args.sample_branch_length_first_bp,
-            last_bp=args.sample_branch_length_last_bp
-        )
+            inference_script_output = run_inference(
+                coalescence_times=inference_script_coalescence_times_path,
+                inference_output_filename=inference_script_output_filename,
+                time_bins=args.inference_script_time_bins_file_path,
+                pop_freq=args.pop_freq,
+                burnin=args.burnin,
+                thin=args.thin
+            )
+            parse_inference_script_output_and_write_to_csv(writer, n_run, inference_script_output)
 
-    run_inference(
-        coalescence_times=args.inference_script_coalescence_times_filename,
-        inference_output_filename=args.inference_script_output_filename,
-        time_bins=args.inference_script_time_bins_file_path
-    )
-    plot(
-        mssel_traj_file_path=args.step_script_output_file_path,
-        input_file_path=args.inference_script_output_filename,
-        output_file_path=os.path.join(args.output_directory, "plot"),
-        effective_population_size=args.effective_population_size
-    )
+            plot(
+                mssel_traj_file_path=step_script_output_file_path,
+                input_file_path=inference_script_output_filename,
+                output_file_path=os.path.join(args.output_directory, "plot"),
+                effective_population_size=args.effective_population_size
+            )
+            if args.csv_only:
+                shutil.rmtree(args.output_directory)
+            elif args.csv_and_plot_only:
+                all_files_in_output_directory = glob(os.path.join(args.output_directory, "*"))
+                all_pdfs_in_output_directory = glob(os.path.join(args.output_directory, "*.pdf"))
+                [os.remove(f) for f in set(all_files_in_output_directory) - set(all_pdfs_in_output_directory)]
+
+            run_computation = False
+
+    f.close()
 
 if __name__ == "__main__":
     main()

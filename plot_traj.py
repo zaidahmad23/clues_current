@@ -29,7 +29,7 @@ epochs = np.load(f'{args.inputPrefix}.epochs.npy')
 freqs = np.load(f'{args.inputPrefix}.freqs.npy')
 logpost = np.load(f'{args.inputPrefix}.post.npy')
 
-im = ax.pcolormesh(epochs[:-1],freqs,np.exp(logpost)[:,:], shading="auto")
+im = ax.pcolormesh(epochs[:-1],freqs,np.exp(logpost)[:,:], shading="auto", vmax=np.max(np.exp(logpost)))
 ax.axis((0,len(epochs[:-1]),0,1.0))
 ax.set_ylabel('Allele frequency',fontsize=20)
 ax.set_xlabel('Generations before present',fontsize=20)

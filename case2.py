@@ -23,15 +23,13 @@ from pathlib import Path
 import numpy as np
 
 EXTERNAL_DEPENDENCIES = ["git", "gcc", "Rscript"]
+VERBOSE = 0
 
 
-def is_debug_mode_active():
-    return os.environ.get("DEBUG", False)
-
-
-def print_if_debug_mode_active(obj):
-    if is_debug_mode_active():
-        print(obj)
+def print_if_debug_mode_active(obj, level=1):
+    global VERBOSE
+    if VERBOSE >= level:
+        print(obj if not isinstance(obj, bytes) else obj.decode())
 
 
 def parse_inference_script_output_and_write_to_csv(writer, run, inference_script_output):
@@ -129,8 +127,8 @@ def run_mssel(
                 "./rhps_coalescent/msseldir/mssel",
                 nanc + nder,
                 nreps,
-                nanc,
                 nder,
+                nanc,
                 path_to_trajfile,
                 sel_spot,
                 "-r",
@@ -155,13 +153,13 @@ def convert_txt_to_haps_and_sample(r_script_path, input_txt_file_path, output_fi
 
 
 
-def run_inference(ancient_samples_file_path, inference_output_filename, time_bins):
+def run_inference(ancient_samples_file_path, inference_output_filename, time_bins, pop_freq):
     command = ["python3", "inference.py"]
     if ancient_samples_file_path is not None:
         command += ["--ancientSamps", ancient_samples_file_path]
     if time_bins is not None:
         command += ["--timeBins", time_bins]
-    command += ["--out", inference_output_filename]
+    command += ["--popFreq", str(pop_freq), "--out", inference_output_filename]
     return execute_command(command, cwd="./clues").stdout
 
 
@@ -255,9 +253,17 @@ def main():
     argparser.add_argument("--create-ancient-samples", action="store_true")
     argparser.add_argument("--step2-script-ancient-samples-generation-gap", type=str, required=True)
     argparser.add_argument("--step2-script-number-of-ancient-samples", type=int, required=True)
+    argparser.add_argument("--verbose", "-v", action="count", default=0)
 
     args = argparser.parse_args()
+
+    global VERBOSE
+    VERBOSE = args.verbose
+
     fill_defaults(args)
+
+    def fill_defaults1(args):
+        args.pop_freq = np.loadtxt(os.path.join(args.output_directory, "mssel.traj"), dtype=float, skiprows=3)[0][1]
 
     # Ensuring internal/external dependencies
     ensure_internal_dependencies(args)
@@ -305,6 +311,9 @@ def main():
             recombination_rate=args.recombination_rate,
             output_file=massel_output,
         )
+
+        fill_defaults1(args)
+
         convert_txt_to_haps_and_sample(
             r_script_path=args.path_to_converter_script,
             input_txt_file_path=massel_output,
@@ -326,7 +335,8 @@ def main():
         inference_script_output = run_inference(
             ancient_samples_file_path=step2_script_ancient_samples_file_path,
             inference_output_filename=inference_script_output_filename,
-            time_bins=args.inference_script_time_bins_file_path
+            time_bins=args.inference_script_time_bins_file_path,
+            pop_freq=args.pop_freq
         )
         parse_inference_script_output_and_write_to_csv(writer, n_run, inference_script_output)
 
