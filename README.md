@@ -1,9 +1,9 @@
 # clues_script
 step.py creates .traj files for mssel 
 
-case1.py runs inference with only --times specified 
-case2.py runs inference with only --ancientSamps specified
-case3.py runs inference with both --times and --ancientSamps specified
+case1.py runs inference with only --times specified (modern samples only)
+case2.py runs inference with only --ancientSamps specified (ancient samples only)
+case3.py runs inference with both --times and --ancientSamps specified (modern and ancient samples only)
 
 LAUNCH OPTIONS:
 
